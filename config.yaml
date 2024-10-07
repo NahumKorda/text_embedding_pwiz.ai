@@ -1,0 +1,5 @@
+model: "distilroberta-base"
+example_dataset: "embedding-data/QQP_triplets"
+batch_size: 16
+epochs: 10
+model_directory: "/home/nahum/code/resources/ai_demo_library/embedding_model"
