@@ -19,5 +19,8 @@ class Trainer:
             epochs=self.__config.epochs
         )
 
+    def evaluate(self):
+        pass
+
     def save(self):
         self.__model.save(self.__config.model_directory)
