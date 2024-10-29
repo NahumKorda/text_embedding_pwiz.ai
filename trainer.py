@@ -1,26 +1,58 @@
-from sentence_transformers import SentenceTransformer, models, losses
-from torch.utils.data import DataLoader
+import os.path
+from datasets import Dataset
+from sentence_transformers import SentenceTransformer, SentenceTransformerTrainer
+from sentence_transformers.losses import TripletLoss
+from sentence_transformers.evaluation import TripletEvaluator
 from config import Config
 
 
 class Trainer:
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, train_dataset: Dataset, eval_dataset: Dataset):
         self.__config = config
-        base_model = models.Transformer(config.model)
-        pooling_model = models.Pooling(base_model.get_word_embedding_dimension())
-        self.__model = SentenceTransformer(modules=[base_model, pooling_model])
-        # Experiment with different loss algorithms
-        self.__loss = losses.TripletLoss(model=self.__model)
+        self.__model = self.__get_model(config)
+        self.__trainer = self.__get_trainer(config, train_dataset, eval_dataset)
 
-    def train(self, data_loader: DataLoader):
-        self.__model.fit(
-            train_objectives=[(data_loader, self.__loss)],
-            epochs=self.__config.epochs
+    @staticmethod
+    def __get_model(config: Config):
+        return SentenceTransformer(config.model)
+
+    def __get_trainer(self, config: Config, train_dataset: Dataset, eval_dataset: Dataset):
+
+        loss = TripletLoss(self.__model)
+
+        dev_evaluator = TripletEvaluator(
+            anchors=eval_dataset["anchor"],
+            positives=eval_dataset["positive"],
+            negatives=eval_dataset["negative"],
+            name="pwiz.ai",
+            show_progress_bar=False
+        )
+        dev_evaluator(self.__model)
+
+        return SentenceTransformerTrainer(
+            model=self.__model,
+            args=config.get_training_args(),
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            loss=loss,
+            evaluator=dev_evaluator,
         )
 
-    def evaluate(self):
-        pass
+    def train(self):
+        self.__trainer.train()
+
+    def evaluate(self, test_dataset: Dataset):
+        test_evaluator = TripletEvaluator(
+            anchors=test_dataset["anchor"],
+            positives=test_dataset["positive"],
+            negatives=test_dataset["negative"],
+            name="pwiz.ai",
+            show_progress_bar=False
+        )
+        metrics = test_evaluator(self.__model)
+        print(metrics)
 
     def save(self):
-        self.__model.save(self.__config.model_directory)
+        output_dir = os.path.join(self.__config.output_dir, "final")
+        self.__model.save_pretrained(output_dir)
